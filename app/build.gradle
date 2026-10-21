@@ -1,0 +1,34 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.aalamstudio.sdk'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.aalamstudio.sdk"
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+    signingConfigs {
+        aalam {
+            storeFile file('aalam-debug.jks')
+            storeType 'pkcs12'
+            storePassword 'aalam123'
+            keyAlias 'aalamdebug'
+            keyPassword 'aalam123'
+        }
+    }
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.aalam
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
