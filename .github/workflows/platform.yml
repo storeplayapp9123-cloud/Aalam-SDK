@@ -1,0 +1,36 @@
+name: Android platform jar
+
+on: workflow_dispatch
+
+permissions:
+  contents: write
+
+env:
+  API_LEVEL: '34'
+  DEST: app/src/main/assets/sdk/platform
+
+jobs:
+  platform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy android.jar
+        run: |
+          ls "$ANDROID_HOME/platforms" || true
+          JAR="$ANDROID_HOME/platforms/android-$API_LEVEL/android.jar"
+          if [ ! -f "$JAR" ]; then
+            echo "android-$API_LEVEL platform runner par nahi mila"
+            exit 1
+          fi
+          mkdir -p "$DEST"
+          cp "$JAR" "$DEST/android.jar"
+          ls -la "$DEST"
+
+      - name: Commit to repo
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git add -f "$DEST/android.jar"
+          git diff --cached --quiet || git commit -m "Add android.jar (API $API_LEVEL)"
+          git push
