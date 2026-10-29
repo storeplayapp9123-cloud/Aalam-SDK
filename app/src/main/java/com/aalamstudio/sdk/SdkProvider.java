@@ -14,30 +14,47 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.TreeSet;
 
 public class SdkProvider extends ContentProvider {
 
     public static final String AUTHORITY = "com.aalamstudio.sdk.provider";
-    static final String ROOT = "sdk"; // assets/sdk/...
+    static final String ROOT = "sdk";               // assets/sdk/...
+    static final String INSTALLED = "sdk-installed"; // download hui files (filesDir ke andar)
 
     @Override
     public boolean onCreate() {
         return true;
     }
 
-    /** content://AUTHORITY/index -> har file ka path (sdk/ ke andar ka). */
+    /**
+     * content://AUTHORITY/index   -> saari files ke path
+     * content://AUTHORITY/version -> ek string, jo download hui files badalne par badalti hai
+     */
     @Override
     public Cursor query(Uri uri, String[] projection, String selection,
                         String[] selectionArgs, String sortOrder) {
-        MatrixCursor c = new MatrixCursor(new String[]{"path"});
+        Context ctx = getContext();
+
+        if ("version".equals(uri.getLastPathSegment())) {
+            MatrixCursor v = new MatrixCursor(new String[]{"version"});
+            v.addRow(new Object[]{String.valueOf(newest(new File(ctx.getFilesDir(), INSTALLED)))});
+            return v;
+        }
+
+        TreeSet<String> all = new TreeSet<>();
         try {
-            list(getContext(), ROOT, "", c);
+            list(ctx, ROOT, "", all);
         } catch (IOException ignored) {
         }
+        listInstalled(new File(ctx.getFilesDir(), INSTALLED), "", all);
+
+        MatrixCursor c = new MatrixCursor(new String[]{"path"});
+        for (String p : all) c.addRow(new Object[]{p});
         return c;
     }
 
-    private static void list(Context ctx, String assetPath, String rel, MatrixCursor c)
+    private static void list(Context ctx, String assetPath, String rel, TreeSet<String> out)
             throws IOException {
         String[] kids = ctx.getAssets().list(assetPath);
         if (kids == null) return;
@@ -46,9 +63,28 @@ public class SdkProvider extends ContentProvider {
             String full = assetPath + "/" + k;
             String r = rel.isEmpty() ? k : rel + "/" + k;
             String[] sub = ctx.getAssets().list(full);
-            if (sub != null && sub.length > 0) list(ctx, full, r, c);
-            else c.addRow(new Object[]{r});
+            if (sub != null && sub.length > 0) list(ctx, full, r, out);
+            else out.add(r);
         }
+    }
+
+    private static void listInstalled(File dir, String rel, TreeSet<String> out) {
+        File[] kids = dir.listFiles();
+        if (kids == null) return;
+        for (File k : kids) {
+            if (k.getName().startsWith(".")) continue;
+            String r = rel.isEmpty() ? k.getName() : rel + "/" + k.getName();
+            if (k.isDirectory()) listInstalled(k, r, out);
+            else if (k.length() > 0) out.add(r);
+        }
+    }
+
+    private static long newest(File f) {
+        if (f.isFile()) return f.lastModified();
+        long m = 0;
+        File[] kids = f.listFiles();
+        if (kids != null) for (File k : kids) m = Math.max(m, newest(k));
+        return m;
     }
 
     /** content://AUTHORITY/<path> -> file (sirf padhne ke liye). */
@@ -64,6 +100,14 @@ public class SdkProvider extends ContentProvider {
         rel = rel.substring(1);
 
         Context ctx = getContext();
+
+        // 1) download hui file (Google se) ko pehle dekho
+        File inst = new File(new File(ctx.getFilesDir(), INSTALLED), rel);
+        if (inst.isFile() && inst.length() > 0) {
+            return ParcelFileDescriptor.open(inst, ParcelFileDescriptor.MODE_READ_ONLY);
+        }
+
+        // 2) nahi to app ke saath aayi file (assets/sdk/...)
         File cacheRoot = new File(ctx.getFilesDir(), "sdk-cache");
         freshCache(ctx, cacheRoot);
 
